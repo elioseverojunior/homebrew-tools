@@ -31,24 +31,24 @@ class Tmq < Formula
   on_macos do
     on_arm do
       url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-darwin-arm64"
-      sha256 "8caae7edf6a0412b9f4311b13f01c9172b619406b4972cae72dfec34c31f7716"
+      sha256 "843b30ca5380f4abdd2f5333bd977ecaba5a9be87d7b3d040e667aa6b982f73b"
     end
 
     on_intel do
       url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-darwin-amd64"
-      sha256 "60207e38dd77d88cb8740cfa1be34a22366970c3531b7afe0dd7630ac34278c6"
+      sha256 "69ad4b9fc1496644fb8ba0bce865fd6ce354b5be09185c300427bbac80cd9e13"
     end
   end
 
   on_linux do
     on_arm do
       url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-linux-arm64"
-      sha256 "48da2e4eae0fdd56c5b502c7228c0ea1fc6fb1510f931343d1dd8a203f05c9b4"
+      sha256 "5b5fb8dd92e9fb52de0695a0b20d928ceda65e2e360bd5a074d3df635f95f84c"
     end
 
     on_intel do
       url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-linux-amd64"
-      sha256 "0e1c7ea808b491bd2f92091320e2f472cb33b003fdc7fbdfec8e21cdaa5a323f"
+      sha256 "754a69ec176900d8aa350419dd209011ff99c86f1d0b7c981efca38b0b50c877"
     end
   end
 
