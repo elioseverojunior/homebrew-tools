@@ -212,7 +212,7 @@ rumdl check .
 actionlint
 shellcheck scripts/*.sh
 mise run homebrew:check
-brew style Formula Casks
+brew style Formula Casks scripts
 '''
 shell = "bash -c"
 usage = '''

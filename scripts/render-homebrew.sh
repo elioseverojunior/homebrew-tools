@@ -35,8 +35,8 @@ log() {
 }
 
 cleanup() {
-  [ -z "${work_dir}" ] || rm -rf "${work_dir}"
-  [ -z "${temp_target}" ] || rm -f "${temp_target}"
+  [[ -z "${work_dir}" ]] || rm -rf "${work_dir}"
+  [[ -z "${temp_target}" ]] || rm -f "${temp_target}"
 }
 
 repo_for() {
@@ -75,20 +75,24 @@ asset_file() {
 }
 
 asset_url() {
-  local tool="$1" version="$2" file="$3"
-  echo "https://github.com/$(repo_for "${tool}")/releases/download/$(tag_for "${tool}" "${version}")/${file}"
+  local tool="$1" version="$2" file="$3" repo tag
+  repo="$(repo_for "${tool}")"
+  tag="$(tag_for "${tool}" "${version}")"
+  echo "https://github.com/${repo}/releases/download/${tag}/${file}"
 }
 
 # Print the latest upstream release version without its leading "v".
 latest_version() {
-  local tag
-  tag="$(gh api "repos/$(repo_for "$1")/releases/latest" --jq .tag_name)"
-  [ -n "${tag}" ] || die "could not resolve the latest release of $1"
+  local repo tag
+  repo="$(repo_for "$1")"
+  tag="$(gh api "repos/${repo}/releases/latest" --jq .tag_name)"
+  [[ -n "${tag}" ]] || die "could not resolve the latest release of $1"
   echo "${tag#v}"
 }
 
 sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then
+  if command -v sha256sum >/dev/null 2>&1
+  then
     sha256sum "$1" | cut -d' ' -f1
   else
     shasum -a 256 "$1" | cut -d' ' -f1
@@ -108,9 +112,10 @@ download() {
 
 # Print the sha256 listed for <file> in a checksums.txt; exactly one is required.
 expected_hash_from_checksums() {
-  local checksums="$1" file="$2" matches
+  local checksums="$1" file="$2" matches count
   matches="$(awk -v name="${file}" '$2 == name || $2 == "*" name { print $1 }' "${checksums}")"
-  [ "$(grep -c . <<<"${matches}")" -eq 1 ] || die "need exactly one checksum for ${file}"
+  count="$(grep -c . <<<"${matches}" || true)"
+  [[ "${count}" -eq 1 ]] || die "need exactly one checksum for ${file}"
   [[ "${matches}" =~ ^[0-9a-f]{64}$ ]] || die "malformed checksum '${matches}' for ${file}"
   echo "${matches}"
 }
@@ -122,28 +127,43 @@ record_hash() {
   echo "${placeholder} ${hash} ${source}"
 }
 
+# Hash the tmq source tarball (the formula builds from it).
+collect_source_hash() {
+  local tool="$1" version="$2" repo path hash
+  repo="$(repo_for "${tool}")"
+  path="$(download "https://github.com/${repo}/archive/refs/tags/${version}.tar.gz")"
+  hash="$(sha256_of "${path}")"
+  record_hash "SHA256_SOURCE" "${hash}" "downloaded"
+}
+
 # Hash every asset; tflint hashes must equal upstream's checksums.txt entry.
 collect_hashes() {
-  local tool="$1" version="$2" platform file path hash checksums="" name
-  if [ "${tool}" = "tflint" ]; then
-    checksums="$(download "$(asset_url "${tool}" "${version}" checksums.txt)")"
+  local tool="$1" version="$2" platform file path hash checksums="" name url expected
+  if [[ "${tool}" = "tflint" ]]
+  then
+    url="$(asset_url "${tool}" "${version}" checksums.txt)"
+    checksums="$(download "${url}")"
   fi
-  for platform in "${PLATFORMS[@]}"; do
+  for platform in "${PLATFORMS[@]}"
+  do
     file="$(asset_file "${tool}" "${platform}")"
-    path="$(download "$(asset_url "${tool}" "${version}" "${file}")")"
+    url="$(asset_url "${tool}" "${version}" "${file}")"
+    path="$(download "${url}")"
     hash="$(sha256_of "${path}")"
     name="SHA256_$(tr 'a-z-' 'A-Z_' <<<"${platform}")"
-    if [ -n "${checksums}" ]; then
-      [ "${hash}" = "$(expected_hash_from_checksums "${checksums}" "${file}")" ] ||
+    if [[ -n "${checksums}" ]]
+    then
+      expected="$(expected_hash_from_checksums "${checksums}" "${file}")"
+      [[ "${hash}" = "${expected}" ]] ||
         die "sha256 mismatch for ${file}: downloaded ${hash} differs from checksums.txt"
       record_hash "${name}" "${hash}" "checksums.txt"
     else
       record_hash "${name}" "${hash}" "downloaded"
     fi
   done
-  if [ "${tool}" = "tmq" ]; then
-    path="$(download "https://github.com/$(repo_for "${tool}")/archive/refs/tags/${version}.tar.gz")"
-    record_hash "SHA256_SOURCE" "$(sha256_of "${path}")" "downloaded"
+  if [[ "${tool}" = "tmq" ]]
+  then
+    collect_source_hash "${tool}" "${version}"
   fi
 }
 
@@ -151,33 +171,37 @@ collect_hashes() {
 variable_list() {
   # shellcheck disable=SC2016 # literal ${NAME} words are envsubst's argument
   local platform list='${VERSION}'
-  for platform in "${PLATFORMS[@]}"; do
+  for platform in "${PLATFORMS[@]}"
+  do
     list+=" \${SHA256_$(tr 'a-z-' 'A-Z_' <<<"${platform}")}"
   done
   # shellcheck disable=SC2016 # literal ${NAME} words are envsubst's argument
-  [ "$1" != "tmq" ] || list+=' ${SHA256_SOURCE}'
+  [[ "$1" != "tmq" ]] || list+=' ${SHA256_SOURCE}'
   echo "${list}"
 }
 
 require_variables() {
   local word name
-  for word in $1; do
+  for word in $1
+  do
     name="${word#\$\{}"
     name="${name%\}}"
-    [ -n "${!name:-}" ] || die "${name} is empty"
+    [[ -n "${!name:-}" ]] || die "${name} is empty"
   done
 }
 
 # Render the template of <tool> into <destination> and reject leftovers.
 render_to() {
-  local tool="$1" destination="$2" template="packaging/homebrew/$1.rb.in" variables
-  [ -f "${template}" ] || die "missing template ${template}"
+  local tool="$1" destination="$2" template="packaging/homebrew/$1.rb.in" variables target
+  [[ -f "${template}" ]] || die "missing template ${template}"
   variables="$(variable_list "${tool}")"
   require_variables "${variables}"
   envsubst "${variables}" <"${template}" >"${destination}"
   # shellcheck disable=SC2016 # searching for the literal two characters ${
-  if grep -qF '${' "${destination}"; then
-    die "unresolved placeholder left in rendered $(target_for "${tool}")"
+  if grep -qF '${' "${destination}"
+  then
+    target="$(target_for "${tool}")"
+    die "unresolved placeholder left in rendered ${target}"
   fi
   chmod 0644 "${destination}"
 }
@@ -196,7 +220,8 @@ render() {
 # Print the version recorded in the committed generated file of <tool>.
 committed_version() {
   local tool="$1" target="$2" version
-  if [ "${tool}" = "tflint" ]; then
+  if [[ "${tool}" = "tflint" ]]
+  then
     version="$(sed -n 's/^ *version "\([^"]*\)".*/\1/p' "${target}" | head -n 1)"
   else
     version="$(sed -n 's#.*/releases/download/\([^/]*\)/.*#\1#p' "${target}" | head -n 1)"
@@ -207,18 +232,25 @@ committed_version() {
 
 # Export the sha256 values of the committed file, in template order.
 export_committed_hashes() {
-  local tool="$1" target="$2" platform name hash index=0
+  local tool="$1" target="$2" platform name hash index=0 sha_lines
   local -a names=() hashes=()
-  for platform in "${PLATFORMS[@]}"; do
+  for platform in "${PLATFORMS[@]}"
+  do
     names+=("SHA256_$(tr 'a-z-' 'A-Z_' <<<"${platform}")")
   done
-  [ "${tool}" != "tmq" ] || names+=("SHA256_SOURCE")
-  while IFS= read -r hash; do
-    hashes+=("${hash}")
-  done < <(sed -n 's/^ *sha256 "\([^"]*\)".*/\1/p' "${target}")
-  [ "${#hashes[@]}" -eq "${#names[@]}" ] ||
+  [[ "${tool}" != "tmq" ]] || names+=("SHA256_SOURCE")
+  sha_lines="$(sed -n 's/^ *sha256 "\([^"]*\)".*/\1/p' "${target}")"
+  if [[ -n "${sha_lines}" ]]
+  then
+    while IFS= read -r hash
+    do
+      hashes+=("${hash}")
+    done <<<"${sha_lines}"
+  fi
+  [[ "${#hashes[@]}" -eq "${#names[@]}" ]] ||
     die "expected ${#names[@]} sha256 values in ${target}, found ${#hashes[@]}"
-  for name in "${names[@]}"; do
+  for name in "${names[@]}"
+  do
     [[ "${hashes[index]}" =~ ^[0-9a-f]{64}$ ]] || die "malformed sha256 '${hashes[index]}' in ${target}"
     export "${name}=${hashes[index]}"
     index=$((index + 1))
@@ -228,7 +260,8 @@ export_committed_hashes() {
 # Print a unified diff of <target> against <rendered> and die when they differ.
 diff_or_die() {
   local target="$1" rendered="$2" tool="$3"
-  if ! diff -u --label "${target} (committed)" --label "${target} (rendered)" "${target}" "${rendered}"; then
+  if ! diff -u --label "${target} (committed)" --label "${target} (rendered)" "${target}" "${rendered}"
+  then
     die "${target} differs from its template; edit packaging/homebrew/${tool}.rb.in and re-render"
   fi
 }
@@ -237,7 +270,7 @@ diff_or_die() {
 check() {
   local tool="$1" target
   target="$(target_for "${tool}")"
-  [ -f "${target}" ] || die "missing ${target}"
+  [[ -f "${target}" ]] || die "missing ${target}"
   VERSION="$(committed_version "${tool}" "${target}")"
   export VERSION
   export_committed_hashes "${tool}" "${target}"
@@ -258,10 +291,11 @@ fetch_hashes() {
 
 # Online drift check: compare the committed file with what upstream publishes.
 verify() {
-  local tool="$1" target
+  local tool="$1" target version
   target="$(target_for "${tool}")"
-  [ -f "${target}" ] || die "missing ${target}"
-  fetch_hashes "${tool}" "$(committed_version "${tool}" "${target}")"
+  [[ -f "${target}" ]] || die "missing ${target}"
+  version="$(committed_version "${tool}" "${target}")"
+  fetch_hashes "${tool}" "${version}"
   temp_target="$(mktemp)"
   render_to "${tool}" "${temp_target}"
   diff_or_die "${target}" "${temp_target}" "${tool}"
@@ -269,20 +303,22 @@ verify() {
 }
 
 main() {
-  [ "$#" -ge 1 ] && [ "$#" -le 2 ] || die "usage: render-homebrew.sh [--check|--verify] <tmq|tflint> [<version>]"
+  [[ "$#" -ge 1 ]] && [[ "$#" -le 2 ]] || die "usage: render-homebrew.sh [--check|--verify] <tmq|tflint> [<version>]"
   cd "$(dirname "${BASH_SOURCE[0]}")/.."
   trap cleanup EXIT
   case "$1" in
     --check | --verify)
-      [ "$#" -eq 2 ] || die "usage: render-homebrew.sh $1 <tmq|tflint>"
+      [[ "$#" -eq 2 ]] || die "usage: render-homebrew.sh $1 <tmq|tflint>"
       repo_for "$2" >/dev/null
       "${1#--}" "$2"
       return
       ;;
+    *) ;;
   esac
   local tool="$1" version="${2:-}"
   repo_for "${tool}" >/dev/null
-  if [ -z "${version}" ]; then
+  if [[ -z "${version}" ]]
+  then
     version="$(latest_version "${tool}")"
   fi
   fetch_hashes "${tool}" "${version}"
