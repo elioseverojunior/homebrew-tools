@@ -20,8 +20,10 @@ die() {
 # Print the file that defines <formula>: a formula first, then a cask.
 find_definition() {
   local formula="$1" candidate
-  for candidate in "Formula/${formula:0:1}/${formula}.rb" "Casks/${formula}.rb"; do
-    if [ -f "${candidate}" ]; then
+  for candidate in "Formula/${formula:0:1}/${formula}.rb" "Casks/${formula}.rb"
+  do
+    if [[ -f "${candidate}" ]]
+    then
       echo "${candidate}"
       return 0
     fi
@@ -33,7 +35,7 @@ find_definition() {
 read_field() {
   local file="$1" key="$2" value
   value="$(sed -n -E "s/^[[:space:]]*${key}[[:space:]]+\"([^\"]*)\".*/\1/p" "${file}" | head -n 1)"
-  [ -n "${value}" ] || die "no '${key}' in ${file}"
+  [[ -n "${value}" ]] || die "no '${key}' in ${file}"
   echo "${value}"
 }
 
@@ -42,10 +44,11 @@ read_field() {
 read_version() {
   local file="$1" value
   value="$(sed -n -E 's/^[[:space:]]*version[[:space:]]+"([^"]*)".*/\1/p' "${file}" | head -n 1)"
-  if [ -z "${value}" ]; then
+  if [[ -z "${value}" ]]
+  then
     value="$(sed -n -E 's|^[[:space:]]*url[[:space:]]+"[^"]*/releases/download/v?([0-9][^/"]*)/.*|\1|p' "${file}" | head -n 1)"
   fi
-  [ -n "${value}" ] || die "no version in ${file}"
+  [[ -n "${value}" ]] || die "no version in ${file}"
   echo "${value}"
 }
 
@@ -53,28 +56,21 @@ read_version() {
 # on_intel or on_arm. Pairing happens inside the block, so the order of url and
 # sha256 does not matter; anything but exactly one of each is fatal.
 read_linux_asset() {
-  local file="$1" block="$2" version="$3" found url sha
+  local file="$1" block="$2" version="$3" found url sha count
+  # No awk line may start with "if ": Homebrew's shfmt wrapper mistakes it for a
+  # shell `if` and re-indents everything after it.
   found="$(awk -v block="${block}" '
     /^[[:space:]]*on_linux[[:space:]]+do/ { in_linux = 1; depth = 1; next }
-    in_linux {
-      if ($0 ~ /^[[:space:]]*on_(arm|intel)[[:space:]]+do/) {
-        in_block = ($1 == block); depth++; next
-      }
-      if ($0 ~ /[[:space:]]do[[:space:]]*$/) depth++
-      if ($0 ~ /^[[:space:]]*end[[:space:]]*$/) {
-        depth--; in_block = 0
-        if (depth == 0) in_linux = 0
-        next
-      }
-      if (in_block && match($0, /^[[:space:]]*url[[:space:]]+"[^"]*"/)) {
-        print "url " $2
-      }
-      if (in_block && match($0, /^[[:space:]]*sha256[[:space:]]+"[^"]*"/)) {
-        print "sha " $2
-      }
-    }' "${file}" | tr -d '"')"
-  [ "$(grep -c '^url ' <<<"${found}")" -eq 1 ] || die "need exactly one url in on_linux > ${block} of ${file}"
-  [ "$(grep -c '^sha ' <<<"${found}")" -eq 1 ] || die "need exactly one sha256 in on_linux > ${block} of ${file}"
+    in_linux && /^[[:space:]]*on_(arm|intel)[[:space:]]+do/ { in_block = ($1 == block); depth++; next }
+    in_linux && /[[:space:]]do[[:space:]]*$/ { depth++ }
+    in_linux && /^[[:space:]]*end[[:space:]]*$/ { depth--; in_block = 0; if (depth == 0) in_linux = 0; next }
+    in_block && /^[[:space:]]*url[[:space:]]+"[^"]*"/ { print "url " $2 }
+    in_block && /^[[:space:]]*sha256[[:space:]]+"[^"]*"/ { print "sha " $2 }
+  ' "${file}" | tr -d '"')"
+  count="$(grep -c '^url ' <<<"${found}" || true)"
+  [[ "${count}" -eq 1 ]] || die "need exactly one url in on_linux > ${block} of ${file}"
+  count="$(grep -c '^sha ' <<<"${found}" || true)"
+  [[ "${count}" -eq 1 ]] || die "need exactly one sha256 in on_linux > ${block} of ${file}"
   url="$(sed -n 's/^url //p' <<<"${found}")"
   sha="$(sed -n 's/^sha //p' <<<"${found}")"
   [[ "${sha}" =~ ^[0-9a-f]{64}$ ]] || die "malformed sha256 '${sha}' in ${file}"
@@ -82,7 +78,8 @@ read_linux_asset() {
 }
 
 sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then
+  if command -v sha256sum >/dev/null 2>&1
+  then
     sha256sum "$1" | cut -d' ' -f1
   else
     shasum -a 256 "$1" | cut -d' ' -f1
@@ -96,7 +93,7 @@ download_verified() {
   target="${directory}/$(basename "${url}")"
   curl --fail --silent --show-error --location --proto '=https' --output "${target}" "${url}"
   actual="$(sha256_of "${target}")"
-  [ "${actual}" = "${expected}" ] || die "sha256 mismatch for ${url}: expected ${expected}, got ${actual}"
+  [[ "${actual}" = "${expected}" ]] || die "sha256 mismatch for ${url}: expected ${expected}, got ${actual}"
   echo "${target}"
 }
 
@@ -107,8 +104,8 @@ stage_binary() {
     *.zip) unzip -q -j -o "${download}" "${formula}" -d "${directory}" ;;
     *) cp "${download}" "${directory}/${formula}" ;;
   esac
-  [ -f "${directory}/${formula}" ] || die "no regular file ${formula} after unpacking ${download}"
-  [ ! -L "${directory}/${formula}" ] || die "${formula} in ${download} is a symlink"
+  [[ -f "${directory}/${formula}" ]] || die "no regular file ${formula} after unpacking ${download}"
+  [[ ! -L "${directory}/${formula}" ]] || die "${formula} in ${download} is a symlink"
   chmod 0755 "${directory}/${formula}"
 }
 
@@ -130,10 +127,12 @@ require_metadata() {
   : "${PKG_LICENSE:?PKG_LICENSE is required}" "${PKG_BIN_DIR:?PKG_BIN_DIR is required}"
   : "${NFPM_ARCH:?NFPM_ARCH is required}"
   local name value
-  for name in PKG_NAME PKG_VERSION PKG_DESCRIPTION PKG_HOMEPAGE PKG_LICENSE PKG_BIN_DIR NFPM_ARCH; do
+  for name in PKG_NAME PKG_VERSION PKG_DESCRIPTION PKG_HOMEPAGE PKG_LICENSE PKG_BIN_DIR NFPM_ARCH
+  do
     value="${!name}"
     case "${value}" in
       *"'"* | *$'\n'*) die "${name} must not contain a single quote or newline" ;;
+      *) ;;
     esac
   done
 }
@@ -151,7 +150,8 @@ build_packages() {
   local rendered="$1" format
   render_config "${rendered}"
   mkdir -p dist
-  for format in "${PACKAGE_FORMATS[@]}"; do
+  for format in "${PACKAGE_FORMATS[@]}"
+  do
     nfpm package --config "${rendered}" --packager "${format}" --target dist/
   done
 }
@@ -165,19 +165,24 @@ print_version() {
   read_version "${definition}"
 }
 
+block_for_arch() {
+  case "$1" in
+    amd64) echo on_intel ;;
+    arm64) echo on_arm ;;
+    *) die "arch must be amd64 or arm64, got '$1'" ;;
+  esac
+}
+
 main() {
-  if [ "$#" -eq 2 ] && [ "$1" = "version" ]; then
+  if [[ "$#" -eq 2 ]] && [[ "$1" = "version" ]]
+  then
     print_version "$2"
     return
   fi
-  [ "$#" -eq 2 ] || die "usage: package.sh <formula> <arch: amd64|arm64>"
+  [[ "$#" -eq 2 ]] || die "usage: package.sh <formula> <arch: amd64|arm64>"
   local formula="$1" arch="$2" definition block version asset url sha download
   [[ "${formula}" =~ ^[a-z0-9-]+$ ]] || die "invalid formula name '${formula}'"
-  case "${arch}" in
-    amd64) block=on_intel ;;
-    arm64) block=on_arm ;;
-    *) die "arch must be amd64 or arm64, got '${arch}'" ;;
-  esac
+  block="$(block_for_arch "${arch}")"
   cd "$(dirname "${BASH_SOURCE[0]}")/.."
   definition="$(find_definition "${formula}")"
   version="$(read_version "${definition}")"
