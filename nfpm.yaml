@@ -1,0 +1,22 @@
+# nfpm configuration for the deb, rpm, apk and Arch packages of the tools in
+# this tap. `mise run package` calls scripts/package.sh, which exports the
+# PKG_* and NFPM_ARCH variables below once per tool, format and architecture
+# and renders this file with envsubst first, because nfpm does not expand
+# ${PKG_LICENSE} itself. Values are single-quoted so YAML cannot misread them.
+# Docs: https://nfpm.goreleaser.com/docs/configuration/
+name: '${PKG_NAME}'
+arch: '${NFPM_ARCH}'
+platform: linux
+version: '${PKG_VERSION}'
+release: "1"
+section: utils
+priority: optional
+maintainer: Elio S. Jr <elioseverojunior@gmail.com>
+description: '${PKG_DESCRIPTION}'
+vendor: Elio S. Jr
+homepage: '${PKG_HOMEPAGE}'
+license: '${PKG_LICENSE}'
+contents:
+  - src: '${PKG_BIN_DIR}/${PKG_NAME}'
+    dst: '/usr/bin/${PKG_NAME}'
+    file_info: {mode: 0755}
