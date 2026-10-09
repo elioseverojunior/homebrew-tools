@@ -1,0 +1,79 @@
+name: packages
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - Formula/t/tmq.rb
+      - Casks/tflint.rb
+      - nfpm.yaml
+      - scripts/package.sh
+      - .github/workflows/packages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        formula: [tmq, tflint]
+        arch: [amd64, arm64]
+    steps:
+      - name: Check out the tap
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+      - name: Build the packages
+        run: mise run package ${{ matrix.formula }} ${{ matrix.arch }}
+      - name: Upload the packages
+        uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.formula }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out the tap
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download the packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: dist
+      - name: Create the missing releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for formula in tmq tflint; do
+            version="$(bash scripts/package.sh version "${formula}")"
+            [ -n "${version}" ] || { echo "no version for ${formula}" >&2; exit 1; }
+            tag="${formula}-${version}"
+            if gh release view "${tag}" >/dev/null 2>&1; then
+              # A partial release is repaired: upload anything, overwriting same-named files.
+              gh release upload "${tag}" dist/"${formula}"[_-]* --clobber
+            else
+              gh release create "${tag}" dist/"${formula}"[_-]* --title "${tag}" \
+                --notes "Linux packages for ${formula} ${version}"
+            fi
+          done
