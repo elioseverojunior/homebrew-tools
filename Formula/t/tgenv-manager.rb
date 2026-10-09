@@ -1,8 +1,8 @@
 class TgenvManager < Formula
   desc "TGENV - Terragrunt Version Manager"
   homepage "https://github.com/tgenv/tgenv"
-  url "https://github.com/tgenv/tgenv/archive/refs/tags/v1.2.1.tar.gz"
-  sha256 "241b18ee59bd993256c9dc0847e23824c9ebf42b4d121db11fbdff9ddb6432b2"
+  url "https://github.com/tgenv/tgenv/archive/refs/tags/v1.3.0.tar.gz"
+  sha256 "cccf0d5714cf1156aaa9f451d98601afa3e7bb0b104eda61013a9a8849bee2fb"
   license "MIT"
   head "https://github.com/tgenv/tgenv.git", branch: "main"
 
@@ -11,13 +11,9 @@ class TgenvManager < Formula
     regex(/^v?(\d+(?:\.\d+)+)$/i)
   end
 
-  bottle do
-    rebuild 1
-    sha256 cellar: :any_skip_relocation, all: "241b18ee59bd993256c9dc0847e23824c9ebf42b4d121db11fbdff9ddb6432b2"
-  end
-
   uses_from_macos "unzip"
 
+  conflicts_with "tgenv", because: "both install a tgenv executable"
   conflicts_with "tenv", because: "tgenv symlinks terragrunt binaries"
   conflicts_with "terragrunt", because: "tgenv symlinks terragrunt binaries"
 
@@ -26,6 +22,6 @@ class TgenvManager < Formula
   end
 
   test do
-    assert_match "0.69.9", shell_output("#{bin}/tgenv list-remote")
+    assert_match "Usage: tgenv", shell_output("#{bin}/tgenv help")
   end
 end
