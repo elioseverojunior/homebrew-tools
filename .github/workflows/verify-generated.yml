@@ -1,0 +1,39 @@
+name: verify-generated
+
+on:
+  pull_request:
+    paths:
+      - Formula/t/tmq.rb
+      - Casks/tflint.rb
+      - packaging/homebrew/**
+      - scripts/render-homebrew.sh
+      - .github/workflows/verify-generated.yml
+  push:
+    branches:
+      - main
+    paths:
+      - Formula/t/tmq.rb
+      - Casks/tflint.rb
+      - packaging/homebrew/**
+      - scripts/render-homebrew.sh
+      - .github/workflows/verify-generated.yml
+  schedule:
+    # Weekly: also catches an upstream re-upload of an already released asset.
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the tap
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Set up mise
+        uses: jdx/mise-action@v5
+      - name: Check the generated files against templates and upstream
+        run: mise run homebrew:check --online
