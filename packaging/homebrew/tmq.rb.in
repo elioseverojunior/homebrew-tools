@@ -31,31 +31,31 @@ class Tmq < Formula
   # filename from the URL rather than repeating the arch mapping.
   on_macos do
     on_arm do
-      url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-darwin-arm64"
-      sha256 "843b30ca5380f4abdd2f5333bd977ecaba5a9be87d7b3d040e667aa6b982f73b"
+      url "https://github.com/azolfagharj/tmq/releases/download/${VERSION}/tmq-darwin-arm64"
+      sha256 "${SHA256_DARWIN_ARM64}"
     end
 
     on_intel do
-      url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-darwin-amd64"
-      sha256 "69ad4b9fc1496644fb8ba0bce865fd6ce354b5be09185c300427bbac80cd9e13"
+      url "https://github.com/azolfagharj/tmq/releases/download/${VERSION}/tmq-darwin-amd64"
+      sha256 "${SHA256_DARWIN_AMD64}"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-linux-arm64"
-      sha256 "5b5fb8dd92e9fb52de0695a0b20d928ceda65e2e360bd5a074d3df635f95f84c"
+      url "https://github.com/azolfagharj/tmq/releases/download/${VERSION}/tmq-linux-arm64"
+      sha256 "${SHA256_LINUX_ARM64}"
     end
 
     on_intel do
-      url "https://github.com/azolfagharj/tmq/releases/download/1.0.3/tmq-linux-amd64"
-      sha256 "754a69ec176900d8aa350419dd209011ff99c86f1d0b7c981efca38b0b50c877"
+      url "https://github.com/azolfagharj/tmq/releases/download/${VERSION}/tmq-linux-amd64"
+      sha256 "${SHA256_LINUX_AMD64}"
     end
   end
 
   resource "source" do
-    url "https://github.com/azolfagharj/tmq/archive/refs/tags/1.0.3.tar.gz"
-    sha256 "40c19c0203cfefe9a85f44408b7441fd06c1f24e7d5f1d044f6c8b44dd2ff691"
+    url "https://github.com/azolfagharj/tmq/archive/refs/tags/${VERSION}.tar.gz"
+    sha256 "${SHA256_SOURCE}"
   end
 
   def install
