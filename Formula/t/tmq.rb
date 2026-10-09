@@ -87,8 +87,11 @@ class Tmq < Formula
       name = "homebrew"
     TOML
 
+    # tmq rejects absolute paths under /var, /etc, /usr, ... and Homebrew's test
+    # directory is under /var on Linux, so pass the path relative to testpath
+    # (the test runs with it as the working directory).
     assert_equal "homebrew",
-      shell_output("#{bin}/tmq #{testpath}/config.toml '.owner.name'").strip
+      shell_output("#{bin}/tmq config.toml '.owner.name'").strip
 
     assert_equal "tmq",
       pipe_output("#{bin}/tmq - '.title'", (testpath/"config.toml").read).strip
