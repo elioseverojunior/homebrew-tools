@@ -1,0 +1,6 @@
+.idea/
+.remember/
+.superpowers/
+.rumdl_cache/
+mise.local.toml
+dist/
