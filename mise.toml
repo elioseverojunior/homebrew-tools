@@ -87,7 +87,7 @@ brew_versions() {
 
 # `mise ls --current` merges the global config, so intersecting with BREW_TOOLS
 # below keeps this to the project's own tools.
-pins="$(MISE_DISABLE_TOOLS= mise ls --current --json | jq -r 'to_entries[] | "\(.key) \(.value[0].requested_version)"' | sort)"
+pins="$(MISE_DISABLE_TOOLS= mise ls --current --json | jq -r 'to_entries[] | "\(.key | sub("^[^:]*:"; " ")) \(.value[0].requested_version)"' | sort)"
 
 # Fingerprint every input that decides this file's content. Hashing mise.lock
 # alone is NOT sufficient: Homebrew moving swiftlint 0.65.0 -> 0.66.0 must force
@@ -191,7 +191,6 @@ fi
   # file is only ever about stepping aside for the system package manager.
 } > "$local_cfg"
 
-mise lock
 mise install
 mise deps
 refresh_fp
