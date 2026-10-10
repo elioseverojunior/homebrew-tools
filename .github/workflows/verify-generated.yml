@@ -3,6 +3,8 @@ name: verify-generated
 on:
   pull_request:
     paths:
+      - Formula/n/nvmrc.rb
+      - Formula/t/tgenv-manager.rb
       - Formula/t/tmq.rb
       - Casks/tflint.rb
       - packaging/homebrew/**
@@ -12,6 +14,8 @@ on:
     branches:
       - main
     paths:
+      - Formula/n/nvmrc.rb
+      - Formula/t/tgenv-manager.rb
       - Formula/t/tmq.rb
       - Casks/tflint.rb
       - packaging/homebrew/**

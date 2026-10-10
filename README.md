@@ -10,6 +10,8 @@ brew tap elioseverojunior/tools
 
 ## Formulae
 
+- `nvmrc` — [elioseverojunior/nvmrc](https://github.com/elioseverojunior/nvmrc):
+  native Rust port of `nvm`, the Node Version Manager
 - `tmq` — [azolfagharj/tmq](https://github.com/azolfagharj/tmq):
   command-line TOML processor, `jq` for TOML
 - `tgenv-manager` — [tgenv/tgenv](https://github.com/tgenv/tgenv):
@@ -77,6 +79,24 @@ Note that `--with-source` still downloads the prebuilt binary (~2.6 MB) before
 discarding it, because a spec's URL is fixed before options are applied. Use
 `--HEAD` to skip that fetch entirely.
 
+### nvmrc
+
+A native Rust port of `nvm` that shares nvm's `$NVM_DIR` layout, so versions
+installed by either tool work with both.
+
+```bash
+brew install elioseverojunior/tools/nvmrc
+```
+
+It installs three binaries: `nvmrc`, `nvm` (the same program under nvm's name)
+and `nvm-exec`. These are the prebuilt release archives; on Linux the static
+musl builds are used, so they run on any distribution. Supported: macOS (arm64,
+x86_64) and Linux (arm64, x86_64).
+
+An `nvm` function that nvm.sh left in a shell startup file shadows the `nvm`
+binary in interactive shells; `nvmrc doctor` finds it and `nvm migrate`
+replaces it.
+
 ### tgenv-manager
 
 Manages multiple Terragrunt versions.
@@ -86,7 +106,7 @@ brew install elioseverojunior/tools/tgenv-manager
 ```
 
 It conflicts with `tenv` and `terragrunt`, since it symlinks Terragrunt
-binaries into place. Currently pinned to upstream v1.3.0.
+binaries into place.
 
 ## Linux packages
 
@@ -112,18 +132,18 @@ The packages are written to `dist/`.
 
 The `tests` workflow runs on pushes to `main` and on pull requests. It runs
 `brew test-bot --only-tap-syntax` (style and audit), then installs and tests
-`tmq` on Linux and macOS (Intel and Apple silicon), and installs the `tflint`
-cask on macOS. Its `generated-files` job runs the offline generated-files check
-(see "Generated files" below).
+`tmq`, `nvmrc` and `tgenv-manager` on Linux and macOS (Intel and Apple
+silicon), and installs the `tflint` cask on macOS. Its `generated-files` job
+runs the offline generated-files check (see "Generated files" below).
 
 The `bump` workflow runs weekly (Mondays, 09:00 UTC) and on manual dispatch.
-It has three jobs:
+It has two jobs:
 
 - `preflight` checks the token and the branch rules first (see below), so a
-  misconfiguration fails early and clearly. The other two jobs need it.
-- `bump` runs `brew bump --open-pr` for `tgenv-manager` only.
-- `render-templates` regenerates `tmq` and `tflint` (see "Generated files")
-  and opens one pull request per tool, from a `bump/<tool>-<version>` branch.
+  misconfiguration fails early and clearly. `render-templates` needs it.
+- `render-templates` regenerates every formula and cask (see "Generated
+  files") and opens one pull request per tool, from a
+  `bump/<tool>-<version>` branch.
 
 A manual run with `dry-run` enabled opens no pull requests: it only reports
 what is outdated or would change.
@@ -164,12 +184,14 @@ sure none of them blocks `bump/*` branches.
 
 ### Generated files
 
-`Formula/t/tmq.rb` and `Casks/tflint.rb` are generated from the templates in
-`packaging/homebrew/*.rb.in`. Each generated file starts with a header saying
-so. Do not edit them by hand: edit the template, then render it again:
+Every formula and cask is generated from its template in
+`packaging/homebrew/*.rb.in`: `Formula/n/nvmrc.rb`,
+`Formula/t/tgenv-manager.rb`, `Formula/t/tmq.rb` and `Casks/tflint.rb`. Each
+generated file starts with a header saying so. Do not edit them by hand: edit
+the template, then render it again:
 
 ```bash
-mise run homebrew:render <tool> [version]   # tool: tmq | tflint
+mise run homebrew:render <tool> [version]   # tool: tmq | tflint | nvmrc | tgenv-manager
 ```
 
 The version defaults to the latest upstream release. The task needs `gh` and
@@ -178,8 +200,12 @@ network access, because it downloads every release asset to hash it.
 - `tmq`: upstream publishes no checksums, so the hashes are computed from the
   downloaded binaries (trust on first download). The bump pull request warns
   about this; verify the hashes before merging.
+- `tgenv-manager`: the formula installs the tagged source tarball, and its
+  hash is likewise computed from the download (trust on first download).
 - `tflint`: the hashes are cross-checked against the upstream release's
   `checksums.txt`.
+- `nvmrc`: the hashes are cross-checked against the upstream release's
+  `SHA256SUMS`.
 - The offline check (`mise run homebrew:check`, run by the `generated-files`
   job of the `tests` workflow and by `mise run lint`) fails when a generated
   file differs from its template. It reads the version and the sha256 values
@@ -187,7 +213,8 @@ network access, because it downloads every release asset to hash it.
   changed hash or version.
 - The online check (`mise run homebrew:check --online`) also catches those. It
   takes the version of the generated file, downloads and hashes exactly that
-  release (for `tflint` the hashes must equal upstream's `checksums.txt`),
+  release (for `tflint` and `nvmrc` the hashes must equal upstream's checksum
+  file),
   re-renders from what upstream publishes and fails on any difference. That
   includes an upstream re-upload of an already released asset.
 - The `verify-generated` workflow runs the online check on pull requests and
@@ -196,7 +223,6 @@ network access, because it downloads every release asset to hash it.
   is the one that catches a re-upload.
 - Hashes and versions are what a bump rewrites, so `homebrew:render` is the
   only way to change them.
-- `tgenv-manager` is not generated; `brew bump` updates it directly.
 
 ## Development
 
