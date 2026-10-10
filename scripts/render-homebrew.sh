@@ -1,25 +1,27 @@
 #!/usr/bin/env bash
 # Render the Homebrew formula/cask of a tap tool from packaging/homebrew/.
-# Usage: scripts/render-homebrew.sh <tmq|tflint> [<version>]
-#        scripts/render-homebrew.sh --check <tmq|tflint>
-#        scripts/render-homebrew.sh --verify <tmq|tflint>
+# Usage: scripts/render-homebrew.sh <tool> [<version>]
+#        scripts/render-homebrew.sh --check <tool>
+#        scripts/render-homebrew.sh --verify <tool>
+# <tool> is one of: tmq, tflint, nvmrc, tgenv-manager.
 # --check is offline and read-only: it re-renders the template with the version
 # and sha256 values read from the committed generated file and exits 1 with a
 # unified diff when the result differs.
 # --verify needs the network and is read-only: it takes the version of the
 # committed generated file, downloads and hashes exactly that release (tflint
-# hashes must equal upstream's checksums.txt), renders into a temporary file and
+# and nvmrc hashes must equal upstream's checksum file), renders into a temporary file and
 # exits 1 with a unified diff when the result differs from the committed file.
 # The version defaults to the latest upstream release. Every release asset is
 # downloaded into a temporary directory and only ever hashed, never executed or
 # unpacked. stdout carries one "<placeholder> <sha256> <source>" line per asset
 # and a final "version <v>" line; all progress goes to stderr.
-#   source "checksums.txt": the hash was verified against upstream's checksum
+#   source "checksums.txt" or "SHA256SUMS": the hash was verified against that
+#                           upstream checksum file
 #   source "downloaded":    upstream publishes none, so the hash is trust on
 #                           first download.
 set -Eeuo pipefail
 
-readonly PLATFORMS=(darwin-arm64 darwin-amd64 linux-arm64 linux-amd64)
+readonly PLATFORMS="darwin-arm64 darwin-amd64 linux-arm64 linux-amd64"
 
 # Globals so the EXIT trap can still see them after main returns.
 work_dir=""
@@ -43,15 +45,17 @@ repo_for() {
   case "$1" in
     tmq) echo "azolfagharj/tmq" ;;
     tflint) echo "terraform-linters/tflint" ;;
-    *) die "unknown tool '$1' (expected tmq or tflint)" ;;
+    nvmrc) echo "elioseverojunior/nvmrc" ;;
+    tgenv-manager) echo "tgenv/tgenv" ;;
+    *) die "unknown tool '$1' (expected tmq, tflint, nvmrc or tgenv-manager)" ;;
   esac
 }
 
-# tmq tags carry no "v" prefix, tflint tags do.
+# tmq tags carry no "v" prefix, the others do.
 tag_for() {
   case "$1" in
     tmq) echo "$2" ;;
-    tflint) echo "v$2" ;;
+    tflint | nvmrc | tgenv-manager) echo "v$2" ;;
     *) die "unknown tool '$1'" ;;
   esac
 }
@@ -60,16 +64,64 @@ target_for() {
   case "$1" in
     tmq) echo "Formula/t/tmq.rb" ;;
     tflint) echo "Casks/tflint.rb" ;;
+    nvmrc) echo "Formula/n/nvmrc.rb" ;;
+    tgenv-manager) echo "Formula/t/tgenv-manager.rb" ;;
     *) die "unknown tool '$1'" ;;
   esac
 }
 
-# Print the release asset file name of <tool> for <platform> (os-arch).
+# Print the platforms (os-arch) <tool> publishes release assets for; nothing
+# when the formula installs from the source tarball alone.
+platforms_for() {
+  case "$1" in
+    tmq | tflint | nvmrc) echo "${PLATFORMS}" ;;
+    tgenv-manager) ;;
+    *) die "unknown tool '$1'" ;;
+  esac
+}
+
+# Print "yes" when the formula of <tool> downloads the tagged source tarball,
+# "no" otherwise.
+source_tarball_for() {
+  case "$1" in
+    tmq | tgenv-manager) echo "yes" ;;
+    tflint | nvmrc) echo "no" ;;
+    *) die "unknown tool '$1'" ;;
+  esac
+}
+
+# Print the upstream checksum file of <tool>, or nothing when it publishes none.
+checksums_file_for() {
+  case "$1" in
+    tmq | tgenv-manager) ;;
+    tflint) echo "checksums.txt" ;;
+    nvmrc) echo "SHA256SUMS" ;;
+    *) die "unknown tool '$1'" ;;
+  esac
+}
+
+# Print the Rust target triple of <platform> (os-arch). Linux uses the static
+# musl builds, which run on any distribution.
+rust_target() {
+  case "$1" in
+    darwin-arm64) echo "aarch64-apple-darwin" ;;
+    darwin-amd64) echo "x86_64-apple-darwin" ;;
+    linux-arm64) echo "aarch64-unknown-linux-musl" ;;
+    linux-amd64) echo "x86_64-unknown-linux-musl" ;;
+    *) die "unknown platform '$1'" ;;
+  esac
+}
+
+# Print the release asset file name of <tool> <version> for <platform> (os-arch).
 asset_file() {
-  local tool="$1" platform="$2"
+  local tool="$1" version="$2" platform="$3" target
   case "${tool}" in
     tmq) echo "tmq-${platform}" ;;
     tflint) echo "tflint_${platform/-/_}.zip" ;;
+    nvmrc)
+      target="$(rust_target "${platform}")"
+      echo "nvmrc-${version}-${target}.tar.gz"
+      ;;
     *) die "unknown tool '${tool}'" ;;
   esac
 }
@@ -127,26 +179,30 @@ record_hash() {
   echo "${placeholder} ${hash} ${source}"
 }
 
-# Hash the tmq source tarball (the formula builds from it).
+# Hash the tagged source tarball of <tool> (the formula builds or installs it).
 collect_source_hash() {
-  local tool="$1" version="$2" repo path hash
+  local tool="$1" version="$2" repo tag path hash
   repo="$(repo_for "${tool}")"
-  path="$(download "https://github.com/${repo}/archive/refs/tags/${version}.tar.gz")"
+  tag="$(tag_for "${tool}" "${version}")"
+  path="$(download "https://github.com/${repo}/archive/refs/tags/${tag}.tar.gz")"
   hash="$(sha256_of "${path}")"
   record_hash "SHA256_SOURCE" "${hash}" "downloaded"
 }
 
-# Hash every asset; tflint hashes must equal upstream's checksums.txt entry.
+# Hash every asset; when upstream publishes a checksum file, each hash must
+# equal its entry there.
 collect_hashes() {
-  local tool="$1" version="$2" platform file path hash checksums="" name url expected
-  if [[ "${tool}" = "tflint" ]]
+  local tool="$1" version="$2" platform file path hash checksums="" checksums_file name url expected source_tarball
+  checksums_file="$(checksums_file_for "${tool}")"
+  source_tarball="$(source_tarball_for "${tool}")"
+  if [[ -n "${checksums_file}" ]]
   then
-    url="$(asset_url "${tool}" "${version}" checksums.txt)"
+    url="$(asset_url "${tool}" "${version}" "${checksums_file}")"
     checksums="$(download "${url}")"
   fi
-  for platform in "${PLATFORMS[@]}"
+  for platform in $(platforms_for "${tool}")
   do
-    file="$(asset_file "${tool}" "${platform}")"
+    file="$(asset_file "${tool}" "${version}" "${platform}")"
     url="$(asset_url "${tool}" "${version}" "${file}")"
     path="$(download "${url}")"
     hash="$(sha256_of "${path}")"
@@ -155,13 +211,13 @@ collect_hashes() {
     then
       expected="$(expected_hash_from_checksums "${checksums}" "${file}")"
       [[ "${hash}" = "${expected}" ]] ||
-        die "sha256 mismatch for ${file}: downloaded ${hash} differs from checksums.txt"
-      record_hash "${name}" "${hash}" "checksums.txt"
+        die "sha256 mismatch for ${file}: downloaded ${hash} differs from ${checksums_file}"
+      record_hash "${name}" "${hash}" "${checksums_file}"
     else
       record_hash "${name}" "${hash}" "downloaded"
     fi
   done
-  if [[ "${tool}" = "tmq" ]]
+  if [[ "${source_tarball}" = "yes" ]]
   then
     collect_source_hash "${tool}" "${version}"
   fi
@@ -170,13 +226,14 @@ collect_hashes() {
 # Print the envsubst variable list of <tool>, as ${NAME} words.
 variable_list() {
   # shellcheck disable=SC2016 # literal ${NAME} words are envsubst's argument
-  local platform list='${VERSION}'
-  for platform in "${PLATFORMS[@]}"
+  local platform list='${VERSION}' source_tarball
+  source_tarball="$(source_tarball_for "$1")"
+  for platform in $(platforms_for "$1")
   do
     list+=" \${SHA256_$(tr 'a-z-' 'A-Z_' <<<"${platform}")}"
   done
   # shellcheck disable=SC2016 # literal ${NAME} words are envsubst's argument
-  [[ "$1" != "tmq" ]] || list+=' ${SHA256_SOURCE}'
+  [[ "${source_tarball}" != "yes" ]] || list+=' ${SHA256_SOURCE}'
   echo "${list}"
 }
 
@@ -210,6 +267,8 @@ render_to() {
 render() {
   local tool="$1" target
   target="$(target_for "${tool}")"
+  # The first render of a tool may be the first formula of its shard.
+  mkdir -p "$(dirname "${target}")"
   temp_target="$(mktemp "$(dirname "${target}")/.render.XXXXXX")"
   render_to "${tool}" "${temp_target}"
   mv "${temp_target}" "${target}"
@@ -224,7 +283,9 @@ committed_version() {
   then
     version="$(sed -n 's/^ *version "\([^"]*\)".*/\1/p' "${target}" | head -n 1)"
   else
-    version="$(sed -n 's#.*/releases/download/\([^/]*\)/.*#\1#p' "${target}" | head -n 1)"
+    # A release asset URL first; a source-only formula has just the tarball.
+    version="$(sed -n -e 's#.*/releases/download/v\{0,1\}\([^/]*\)/.*#\1#p' \
+      -e 's#.*/archive/refs/tags/v\{0,1\}\([^/]*\)\.tar\.gz".*#\1#p' "${target}" | head -n 1)"
   fi
   [[ "${version}" =~ ^[0-9]+(\.[0-9]+)*$ ]] || die "no valid version found in ${target} ('${version}')"
   echo "${version}"
@@ -234,11 +295,13 @@ committed_version() {
 export_committed_hashes() {
   local tool="$1" target="$2" platform name hash index=0 sha_lines
   local -a names=() hashes=()
-  for platform in "${PLATFORMS[@]}"
+  local source_tarball
+  source_tarball="$(source_tarball_for "${tool}")"
+  for platform in $(platforms_for "${tool}")
   do
     names+=("SHA256_$(tr 'a-z-' 'A-Z_' <<<"${platform}")")
   done
-  [[ "${tool}" != "tmq" ]] || names+=("SHA256_SOURCE")
+  [[ "${source_tarball}" != "yes" ]] || names+=("SHA256_SOURCE")
   sha_lines="$(sed -n 's/^ *sha256 "\([^"]*\)".*/\1/p' "${target}")"
   if [[ -n "${sha_lines}" ]]
   then
@@ -303,12 +366,12 @@ verify() {
 }
 
 main() {
-  [[ "$#" -ge 1 ]] && [[ "$#" -le 2 ]] || die "usage: render-homebrew.sh [--check|--verify] <tmq|tflint> [<version>]"
+  [[ "$#" -ge 1 ]] && [[ "$#" -le 2 ]] || die "usage: render-homebrew.sh [--check|--verify] <tool> [<version>]"
   cd "$(dirname "${BASH_SOURCE[0]}")/.."
   trap cleanup EXIT
   case "$1" in
     --check | --verify)
-      [[ "$#" -eq 2 ]] || die "usage: render-homebrew.sh $1 <tmq|tflint>"
+      [[ "$#" -eq 2 ]] || die "usage: render-homebrew.sh $1 <tool>"
       repo_for "$2" >/dev/null
       "${1#--}" "$2"
       return

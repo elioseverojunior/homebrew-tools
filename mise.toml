@@ -261,7 +261,7 @@ bash ${trace_flag:+"${trace_flag}"} scripts/render-homebrew.sh "${usage_tool}" $
 shell = "bash -c"
 usage = '''
 flag "-v --verbose" help="Trace each command (set -x)"
-arg "<tool>" help="Tool to render (tmq or tflint)"
+arg "<tool>" help="Tool to render (tmq, tflint, nvmrc or tgenv-manager)"
 arg "[version]" help="Release version without a leading v (default: latest upstream release)"
 '''
 
@@ -279,7 +279,7 @@ set -Eeuo pipefail
 trace_flag=""
 [ "${usage_verbose:-false}" = "true" ] && trace_flag="-x"
 
-for tool in ${usage_tool:-tmq tflint}; do
+for tool in ${usage_tool:-tmq tflint nvmrc tgenv-manager}; do
   bash ${trace_flag:+"${trace_flag}"} scripts/render-homebrew.sh --check "${tool}"
   [ "${usage_online:-false}" != "true" ] ||
     bash ${trace_flag:+"${trace_flag}"} scripts/render-homebrew.sh --verify "${tool}"
@@ -289,5 +289,5 @@ shell = "bash -c"
 usage = '''
 flag "-v --verbose" help="Trace each command (set -x)"
 flag "-o --online" help="Also compare against what upstream publishes (needs network)"
-arg "[tool]" help="Tool to check (tmq or tflint; default: both)"
+arg "[tool]" help="Tool to check (tmq, tflint, nvmrc or tgenv-manager; default: all)"
 '''

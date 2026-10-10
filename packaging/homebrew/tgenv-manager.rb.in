@@ -3,8 +3,8 @@
 class TgenvManager < Formula
   desc "TGENV - Terragrunt Version Manager"
   homepage "https://github.com/tgenv/tgenv"
-  url "https://github.com/tgenv/tgenv/archive/refs/tags/v1.3.0.tar.gz"
-  sha256 "cccf0d5714cf1156aaa9f451d98601afa3e7bb0b104eda61013a9a8849bee2fb"
+  url "https://github.com/tgenv/tgenv/archive/refs/tags/v${VERSION}.tar.gz"
+  sha256 "${SHA256_SOURCE}"
   license "MIT"
   head "https://github.com/tgenv/tgenv.git", branch: "main"
 
