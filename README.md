@@ -155,21 +155,12 @@ checks then show on the pull request.
 A manual run with `dry-run` enabled opens no pull requests: it only reports
 what is outdated or would change.
 
-### Secrets and variables
+### Commit signing
 
-- `BUMP_SIGNING_KEY` (secret, optional): a passphrase-less ed25519 private
-  key. Register its public half as a *signing key* on the GitHub account whose
-  verified email is `BUMP_COMMIT_EMAIL`. When set, `render-templates` signs its
-  commits with it.
-- `BUMP_COMMIT_NAME` and `BUMP_COMMIT_EMAIL` (variables): the author of the
-  signed commits. They are required when `BUMP_SIGNING_KEY` is set, and the
-  email must be a verified email of the account that holds the signing key,
-  or GitHub does not mark the commits as verified.
-
-Without `BUMP_SIGNING_KEY` the `render-templates` commits are unsigned and
-authored by `github-actions[bot]`, so squash-merge those pull requests: GitHub
-then signs the merge commit. The pull request body says whether the commit is
-signed.
+`render-templates` makes its commit through the GraphQL
+`createCommitOnBranch` mutation instead of `git push`. GitHub signs commits it
+creates for `github-actions[bot]`, so every bump commit shows as verified and
+no signing key, secret or variable is needed.
 
 ### Preflight
 
@@ -177,8 +168,6 @@ The `preflight` job fails when:
 
 - A repository ruleset that applies to `bump/*` branches has a `creation` or
   an `update` rule, which blocks the bump branches.
-- A repository ruleset that applies to `bump/*` branches has a
-  `required_signatures` rule and `BUMP_SIGNING_KEY` is not set.
 
 Only repository rulesets can be read this way. Classic branch protection
 patterns need admin rights to read, so `preflight` cannot check them: make

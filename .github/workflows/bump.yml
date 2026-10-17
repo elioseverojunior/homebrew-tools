@@ -29,7 +29,6 @@ jobs:
       contents: read
     env:
       GH_TOKEN: ${{ github.token }}
-      HAS_SIGNING_KEY: ${{ secrets.BUMP_SIGNING_KEY != '' }}
     steps:
       - name: Check the bump branch rules
         run: |
@@ -47,14 +46,10 @@ jobs:
               exit 1
             fi
           done
-          if grep -qx required_signatures <<< "${rules}" && [ "${HAS_SIGNING_KEY}" != "true" ]; then
-            echo "::error::a ruleset requires signed commits but BUMP_SIGNING_KEY is not set; ${readme}"
-            exit 1
-          fi
 
   # Regenerates every formula and cask from packaging/homebrew/ and opens one PR
-  # per tool. The commit is SSH-signed when BUMP_SIGNING_KEY is set;
-  # otherwise it is unsigned and the PR must be squash-merged so GitHub signs it.
+  # per tool. The commit is made through the GraphQL API, so GitHub signs it as
+  # github-actions[bot] and it shows as verified without a signing key.
   render-templates:
     needs: preflight
     runs-on: ubuntu-latest
@@ -76,8 +71,8 @@ jobs:
         with:
           # Always branch from the default branch, even when dispatched elsewhere.
           ref: ${{ github.event.repository.default_branch }}
-          # The later git push reuses the credentials persisted by checkout.
-          persist-credentials: true
+          # Nothing is pushed with git: the commit goes through the API.
+          persist-credentials: false
 
       - name: Set up mise
         uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
@@ -94,40 +89,10 @@ jobs:
           [[ "${version}" =~ ^[0-9]+(\.[0-9]+)*$ ]] || { echo "no valid version rendered" >&2; exit 1; }
           echo "version=${version}" >> "${GITHUB_OUTPUT}"
 
-      - name: Configure commit signing
-        id: signing
-        env:
-          SIGNING_KEY: ${{ secrets.BUMP_SIGNING_KEY }}
-          COMMIT_NAME: ${{ vars.BUMP_COMMIT_NAME }}
-          COMMIT_EMAIL: ${{ vars.BUMP_COMMIT_EMAIL }}
-        run: |
-          # Tracing stays off for the whole step: -x would print the key.
-          set +x
-          if [ -n "${SIGNING_KEY}" ]; then
-            if [ -z "${COMMIT_NAME}" ] || [ -z "${COMMIT_EMAIL}" ]; then
-              echo "::error::BUMP_SIGNING_KEY needs the BUMP_COMMIT_NAME and BUMP_COMMIT_EMAIL variables"
-              exit 1
-            fi
-            key_file="${RUNNER_TEMP}/bump-signing-key"
-            (umask 077 && printf '%s\n' "${SIGNING_KEY}" > "${key_file}")
-            git config gpg.format ssh
-            git config user.signingkey "${key_file}"
-            git config commit.gpgsign true
-            git config user.name "${COMMIT_NAME}"
-            git config user.email "${COMMIT_EMAIL}"
-            echo "signed=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "::warning::BUMP_SIGNING_KEY is not set; the bump commit will be unsigned"
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            echo "signed=false" >> "${GITHUB_OUTPUT}"
-          fi
-
       - name: Open the bump pull request
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.render.outputs.version }}
-          SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
           case "${TOOL}" in
             tmq) generated="Formula/t/tmq.rb" ;;
@@ -142,7 +107,7 @@ jobs:
           fi
 
           branch="bump/${TOOL}-${VERSION}"
-          if git ls-remote --exit-code --heads origin "${branch}" > /dev/null; then
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/${branch}" --silent 2> /dev/null; then
             echo "branch ${branch} already exists on the remote; skipping"
             exit 0
           fi
@@ -160,12 +125,6 @@ jobs:
               echo "WARNING: the hashes with source \`downloaded\` are trust-on-first-download:"
               echo "upstream publishes no checksums for them. Verify them before merging."
             fi
-            echo
-            if [ "${SIGNED}" = "true" ]; then
-              echo "Commit signature: signed (SSH)"
-            else
-              echo "Commit signature: unsigned — squash-merge this PR so GitHub signs the merge commit"
-            fi
           } > "${body}"
 
           if [ "${DRY_RUN}" = "true" ]; then
@@ -175,19 +134,29 @@ jobs:
             exit 0
           fi
 
-          commit_args=()
-          if [ "${SIGNED}" = "true" ]; then
-            commit_args+=(-S)
-          fi
-          git switch -c "${branch}"
-          git add -- "${generated}"
-          git commit "${commit_args[@]}" -m "${title}"
-          git push origin "HEAD:refs/heads/${branch}"
+          # createCommitOnBranch commits as the token's identity, and GitHub
+          # signs commits it creates for github-actions[bot].
+          base="$(git rev-parse HEAD)"
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/heads/${branch}" -f sha="${base}" --silent
+          # $input is a GraphQL variable, not a shell one.
+          # shellcheck disable=SC2016
+          query='mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { url } } }'
+          jq -n \
+            --arg query "${query}" \
+            --arg repository "${GITHUB_REPOSITORY}" \
+            --arg branch "${branch}" \
+            --arg base "${base}" \
+            --arg headline "${title}" \
+            --arg path "${generated}" \
+            --arg contents "$(base64 -w 0 "${generated}")" \
+            '{query: $query, variables: {input: {
+              branch: {repositoryNameWithOwner: $repository, branchName: $branch},
+              expectedHeadOid: $base,
+              message: {headline: $headline},
+              fileChanges: {additions: [{path: $path, contents: $contents}]}
+            }}}' \
+            | gh api graphql --input - --jq .data.createCommitOnBranch.commit.url
           gh pr create --base main --head "${branch}" --title "${title}" --body-file "${body}"
           # Events caused by GITHUB_TOKEN start no workflows, except
           # workflow_dispatch: run the tests on the branch so the PR gets checks.
           gh workflow run tests.yml --ref "${branch}"
-
-      - name: Remove the signing key
-        if: always()
-        run: rm -f "${RUNNER_TEMP}/bump-signing-key"
