@@ -31,11 +31,11 @@ jobs:
     steps:
       - name: Set up Homebrew
         id: set-up-homebrew
-        uses: Homebrew/actions/setup-homebrew@2026.09.28.1
+        uses: Homebrew/actions/setup-homebrew@eb02c69dbabdb66ff183c614f4ce7ab3c077592c # 2026.10.12.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Cache Homebrew gems
-        uses: actions/cache@v6
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ steps.set-up-homebrew.outputs.gems-path }}
           key: ubuntu-latest-rubygems-${{ steps.set-up-homebrew.outputs.gems-hash }}
@@ -59,7 +59,7 @@ jobs:
       contents: read
     steps:
       - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@2026.09.28.1
+        uses: Homebrew/actions/setup-homebrew@eb02c69dbabdb66ff183c614f4ce7ab3c077592c # 2026.10.12.1
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
       - name: Install and test the formulae
@@ -80,10 +80,10 @@ jobs:
       contents: read
     steps:
       - name: Check out the tap
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Set up mise
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
       - name: Check the generated files against their templates
         run: mise run homebrew:check

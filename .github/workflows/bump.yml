@@ -72,7 +72,7 @@ jobs:
       DRY_RUN: ${{ inputs.dry-run }}
     steps:
       - name: Check out the tap
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Always branch from the default branch, even when dispatched elsewhere.
           ref: ${{ github.event.repository.default_branch }}
@@ -80,7 +80,7 @@ jobs:
           persist-credentials: true
 
       - name: Set up mise
-        uses: jdx/mise-action@v5
+        uses: jdx/mise-action@9b200bcecbfd6303e69a4a261b2e09e3757440a7 # v5.2.0
 
       - name: Render the template
         id: render
