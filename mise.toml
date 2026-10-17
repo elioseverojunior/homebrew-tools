@@ -20,7 +20,7 @@ shellcheck = { version = "latest" }
 # arm64 with the compound "<os>/<arch>" form — mise parses both halves, and this
 # is the whole platform gate. The separate `arch` key does NOT filter (verified:
 # arch = ["ppc64"] still resolves on an x64 host); it documents intent only.
-"aqua:hk" = { version = "latest", os = [
+"hk" = { version = "latest", os = [
     "linux",
     "windows",
     "macos/arm64",
