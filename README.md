@@ -139,28 +139,32 @@ runs the offline generated-files check (see "Generated files" below).
 The `bump` workflow runs weekly (Mondays, 09:00 UTC) and on manual dispatch.
 It has two jobs:
 
-- `preflight` checks the token and the branch rules first (see below), so a
+- `preflight` checks the branch rules first (see below), so a
   misconfiguration fails early and clearly. `render-templates` needs it.
 - `render-templates` regenerates every formula and cask (see "Generated
   files") and opens one pull request per tool, from a
   `bump/<tool>-<version>` branch.
+
+Both jobs use the workflow's own `GITHUB_TOKEN`; no personal access token is
+needed. Enable *Settings → Actions → General → Allow GitHub Actions to create
+and approve pull requests*, or `render-templates` cannot open its pull
+requests. Pull requests opened with `GITHUB_TOKEN` do not trigger the `tests`
+workflow, so `render-templates` dispatches `tests` on each bump branch; its
+checks then show on the pull request.
 
 A manual run with `dry-run` enabled opens no pull requests: it only reports
 what is outdated or would change.
 
 ### Secrets and variables
 
-- `HOMEBREW_GITHUB_API_TOKEN` (secret, required): a personal access token
-  with contents and pull-requests write access. Pull requests opened with the
-  default `GITHUB_TOKEN` do not trigger the `tests` workflow, so a PAT is
-  required.
 - `BUMP_SIGNING_KEY` (secret, optional): a passphrase-less ed25519 private
-  key. Register its public half as a *signing key* on the GitHub account that
-  owns the PAT. When set, `render-templates` signs its commits with it.
+  key. Register its public half as a *signing key* on the GitHub account whose
+  verified email is `BUMP_COMMIT_EMAIL`. When set, `render-templates` signs its
+  commits with it.
 - `BUMP_COMMIT_NAME` and `BUMP_COMMIT_EMAIL` (variables): the author of the
   signed commits. They are required when `BUMP_SIGNING_KEY` is set, and the
-  email must be a verified email of the account that owns the PAT, or GitHub
-  does not mark the commits as verified.
+  email must be a verified email of the account that holds the signing key,
+  or GitHub does not mark the commits as verified.
 
 Without `BUMP_SIGNING_KEY` the `render-templates` commits are unsigned and
 authored by `github-actions[bot]`, so squash-merge those pull requests: GitHub
@@ -171,8 +175,6 @@ signed.
 
 The `preflight` job fails when:
 
-- `HOMEBREW_GITHUB_API_TOKEN` is empty.
-- The token has no push permission on this repository.
 - A repository ruleset that applies to `bump/*` branches has a `creation` or
   an `update` rule, which blocks the bump branches.
 - A repository ruleset that applies to `bump/*` branches has a

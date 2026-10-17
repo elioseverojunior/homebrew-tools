@@ -21,30 +21,20 @@ defaults:
     shell: bash -xeuo pipefail {0}
 
 jobs:
-  # Fails early and clearly when the PAT, its push right or a branch rule would
-  # otherwise break the bump jobs late and obscurely.
+  # Fails early and clearly when a branch rule would otherwise break the bump
+  # jobs late and obscurely.
   preflight:
     runs-on: ubuntu-latest
     permissions:
       contents: read
     env:
-      GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
       HAS_SIGNING_KEY: ${{ secrets.BUMP_SIGNING_KEY != '' }}
     steps:
-      - name: Check the token and the bump branch rules
+      - name: Check the bump branch rules
         run: |
           set +x
           readme="see the 'Automated bumps' section of the README"
-          if [ -z "${GH_TOKEN}" ]; then
-            echo "::error::HOMEBREW_GITHUB_API_TOKEN is empty; ${readme}"
-            exit 1
-          fi
-
-          push="$(gh api "repos/${GITHUB_REPOSITORY}" --jq .permissions.push)"
-          if [ "${push}" != "true" ]; then
-            echo "::error::HOMEBREW_GITHUB_API_TOKEN cannot push to ${GITHUB_REPOSITORY}; ${readme}"
-            exit 1
-          fi
 
           # Only repository rulesets are readable here. Classic branch
           # protection patterns need admin rights to read, so they are only
@@ -69,6 +59,8 @@ jobs:
     needs: preflight
     runs-on: ubuntu-latest
     permissions:
+      # actions: write dispatches the tests workflow on the bump branch.
+      actions: write
       contents: write
       pull-requests: write
     strategy:
@@ -84,9 +76,6 @@ jobs:
         with:
           # Always branch from the default branch, even when dispatched elsewhere.
           ref: ${{ github.event.repository.default_branch }}
-          # A PAT is required: PRs opened with GITHUB_TOKEN do not trigger the
-          # tests workflow.
-          token: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
           # The later git push reuses the credentials persisted by checkout.
           persist-credentials: true
 
@@ -96,7 +85,7 @@ jobs:
       - name: Render the template
         id: render
         env:
-          # Read-only lookup of public releases; the PAT is not needed here.
+          # Read-only lookup of public releases.
           GH_TOKEN: ${{ github.token }}
         run: |
           # Only stdout is captured; mise and the script log to stderr.
@@ -136,7 +125,7 @@ jobs:
 
       - name: Open the bump pull request
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_GITHUB_API_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.render.outputs.version }}
           SIGNED: ${{ steps.signing.outputs.signed }}
         run: |
@@ -195,6 +184,9 @@ jobs:
           git commit "${commit_args[@]}" -m "${title}"
           git push origin "HEAD:refs/heads/${branch}"
           gh pr create --base main --head "${branch}" --title "${title}" --body-file "${body}"
+          # Events caused by GITHUB_TOKEN start no workflows, except
+          # workflow_dispatch: run the tests on the branch so the PR gets checks.
+          gh workflow run tests.yml --ref "${branch}"
 
       - name: Remove the signing key
         if: always()
