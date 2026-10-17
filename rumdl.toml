@@ -5,3 +5,7 @@ exclude = ["docs/superpowers"]
 line-length = 80
 code-blocks = false
 tables = true
+
+# GitHub pastes the template under the pull request title, so it starts at H2.
+[per-file-ignores]
+".github/PULL_REQUEST_TEMPLATE.md" = ["MD041"]
