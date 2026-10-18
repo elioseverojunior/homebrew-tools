@@ -3,8 +3,8 @@
 class Nvmrc < Formula
   desc "Native Rust port of nvm, the Node Version Manager"
   homepage "https://github.com/elioseverojunior/nvmrc"
-  url "https://github.com/elioseverojunior/nvmrc/archive/refs/tags/v0.0.1.tar.gz"
-  sha256 "08f3fba9894b3f1a4981d7ec98de57c4ac9203ca24059c2bb23cf4f487842d34"
+  url "https://github.com/elioseverojunior/nvmrc/archive/refs/tags/v0.0.2.tar.gz"
+  sha256 "424e2bb65fc62a9011a163f8e270f5272effe8e3c51bdf4e628d2bba226fc69a"
   license "MIT"
   head "https://github.com/elioseverojunior/nvmrc.git", branch: "main"
 
