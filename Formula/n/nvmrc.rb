@@ -3,45 +3,33 @@
 class Nvmrc < Formula
   desc "Native Rust port of nvm, the Node Version Manager"
   homepage "https://github.com/elioseverojunior/nvmrc"
+  url "https://github.com/elioseverojunior/nvmrc/archive/refs/tags/v0.0.1.tar.gz"
+  sha256 "08f3fba9894b3f1a4981d7ec98de57c4ac9203ca24059c2bb23cf4f487842d34"
   license "MIT"
+  head "https://github.com/elioseverojunior/nvmrc.git", branch: "main"
 
   livecheck do
     url :stable
     strategy :github_latest
   end
 
-  # Each archive holds nvmrc, nvm (the same program under nvm's name) and
-  # nvm-exec. Linux uses the static musl builds, which run on any distribution.
-  on_macos do
-    on_arm do
-      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.1/nvmrc-0.0.1-aarch64-apple-darwin.tar.gz"
-      sha256 "98b74709ef973d3f22cee2f17beefbd9d9298993a11f45071c4b653c705f3647"
-    end
-
-    on_intel do
-      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.1/nvmrc-0.0.1-x86_64-apple-darwin.tar.gz"
-      sha256 "16e52af5c2958e6507e3a3637e174cb733ded41e8d1dfefcaf012c7d6544c07c"
-    end
-  end
-
-  on_linux do
-    on_arm do
-      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.1/nvmrc-0.0.1-aarch64-unknown-linux-musl.tar.gz"
-      sha256 "f6ff1fa04df949c8e0844963f4c3c538e63498ff906d648505b6219a1439276f"
-    end
-
-    on_intel do
-      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.1/nvmrc-0.0.1-x86_64-unknown-linux-musl.tar.gz"
-      sha256 "5f1145c2f603c5f08b9d495632e83be1d73c9860db0dc011484ca5668b607212"
-    end
-  end
+  depends_on "rust" => :build
 
   def install
-    bin.install "nvmrc", "nvm", "nvm-exec"
+    # The repository's .cargo/config.toml denies warnings for its own CI; a
+    # newer rustc lint must not fail an install, so warnings stay warnings.
+    # RUSTFLAGS replaces that list; the release profile there still applies.
+    ENV["RUSTFLAGS"] = "--cap-lints=warn"
+    # One package, three binaries: nvmrc, nvm (the same program under nvm's
+    # name) and nvm-exec.
+    system "cargo", "install", *std_cargo_args
   end
 
   test do
-    assert_equal "nvm #{version}", shell_output("#{bin}/nvmrc --version").strip
+    # A --HEAD build reports the version in Cargo.toml, not Homebrew's HEAD-<sha>.
+    expected = version.head? ? /\Anvm \d+\.\d+\.\d+/ : /\Anvm #{Regexp.escape(version.to_s)}\z/
+    assert_match expected, shell_output("#{bin}/nvmrc --version").strip
+    assert_path_exists bin/"nvm-exec"
 
     # An alias is plain state under $NVM_DIR, so this exercises the real
     # command path without touching the network.

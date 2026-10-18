@@ -9,13 +9,13 @@
 # unified diff when the result differs.
 # --verify needs the network and is read-only: it takes the version of the
 # committed generated file, downloads and hashes exactly that release (tflint
-# and nvmrc hashes must equal upstream's checksum file), renders into a temporary file and
+# hashes must equal upstream's checksum file), renders into a temporary file and
 # exits 1 with a unified diff when the result differs from the committed file.
 # The version defaults to the latest upstream release. Every release asset is
 # downloaded into a temporary directory and only ever hashed, never executed or
 # unpacked. stdout carries one "<placeholder> <sha256> <source>" line per asset
 # and a final "version <v>" line; all progress goes to stderr.
-#   source "checksums.txt" or "SHA256SUMS": the hash was verified against that
+#   source "checksums.txt": the hash was verified against that
 #                           upstream checksum file
 #   source "downloaded":    upstream publishes none, so the hash is trust on
 #                           first download.
@@ -74,8 +74,8 @@ target_for() {
 # when the formula installs from the source tarball alone.
 platforms_for() {
   case "$1" in
-    tmq | tflint | nvmrc) echo "${PLATFORMS}" ;;
-    tgenv-manager) ;;
+    tmq | tflint) echo "${PLATFORMS}" ;;
+    nvmrc | tgenv-manager) ;;
     *) die "unknown tool '$1'" ;;
   esac
 }
@@ -84,8 +84,8 @@ platforms_for() {
 # "no" otherwise.
 source_tarball_for() {
   case "$1" in
-    tmq | tgenv-manager) echo "yes" ;;
-    tflint | nvmrc) echo "no" ;;
+    tmq | nvmrc | tgenv-manager) echo "yes" ;;
+    tflint) echo "no" ;;
     *) die "unknown tool '$1'" ;;
   esac
 }
@@ -93,35 +93,18 @@ source_tarball_for() {
 # Print the upstream checksum file of <tool>, or nothing when it publishes none.
 checksums_file_for() {
   case "$1" in
-    tmq | tgenv-manager) ;;
+    tmq | nvmrc | tgenv-manager) ;;
     tflint) echo "checksums.txt" ;;
-    nvmrc) echo "SHA256SUMS" ;;
     *) die "unknown tool '$1'" ;;
-  esac
-}
-
-# Print the Rust target triple of <platform> (os-arch). Linux uses the static
-# musl builds, which run on any distribution.
-rust_target() {
-  case "$1" in
-    darwin-arm64) echo "aarch64-apple-darwin" ;;
-    darwin-amd64) echo "x86_64-apple-darwin" ;;
-    linux-arm64) echo "aarch64-unknown-linux-musl" ;;
-    linux-amd64) echo "x86_64-unknown-linux-musl" ;;
-    *) die "unknown platform '$1'" ;;
   esac
 }
 
 # Print the release asset file name of <tool> <version> for <platform> (os-arch).
 asset_file() {
-  local tool="$1" version="$2" platform="$3" target
+  local tool="$1" version="$2" platform="$3"
   case "${tool}" in
     tmq) echo "tmq-${platform}" ;;
     tflint) echo "tflint_${platform/-/_}.zip" ;;
-    nvmrc)
-      target="$(rust_target "${platform}")"
-      echo "nvmrc-${version}-${target}.tar.gz"
-      ;;
     *) die "unknown tool '${tool}'" ;;
   esac
 }

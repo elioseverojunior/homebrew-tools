@@ -89,9 +89,14 @@ brew install elioseverojunior/tools/nvmrc
 ```
 
 It installs three binaries: `nvmrc`, `nvm` (the same program under nvm's name)
-and `nvm-exec`. These are the prebuilt release archives; on Linux the static
-musl builds are used, so they run on any distribution. Supported: macOS (arm64,
-x86_64) and Linux (arm64, x86_64).
+and `nvm-exec`. Homebrew downloads the tagged source from GitHub and compiles
+it with `cargo`, pulling in `rust` as a build-only dependency; there is no
+prebuilt binary. Supported: macOS and Linux, on arm64 and x86_64.
+
+```bash
+# Compile the current main branch instead of the latest tag
+brew install --HEAD elioseverojunior/tools/nvmrc
+```
 
 An `nvm` function that nvm.sh left in a shell startup file shadows the `nvm`
 binary in interactive shells; `nvmrc doctor` finds it and `nvm migrate`
