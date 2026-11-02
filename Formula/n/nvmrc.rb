@@ -3,26 +3,56 @@
 class Nvmrc < Formula
   desc "Native Rust port of nvm, the Node Version Manager"
   homepage "https://github.com/elioseverojunior/nvmrc"
-  url "https://github.com/elioseverojunior/nvmrc/archive/refs/tags/v0.0.2.tar.gz"
-  sha256 "424e2bb65fc62a9011a163f8e270f5272effe8e3c51bdf4e628d2bba226fc69a"
   license "MIT"
-  head "https://github.com/elioseverojunior/nvmrc.git", branch: "main"
 
   livecheck do
     url :stable
     strategy :github_latest
   end
 
-  depends_on "rust" => :build
+  # Only --HEAD compiles. Homebrew ships no bottles for macOS Intel, so a stable
+  # source build there would first compile rust and llvm from source (hours).
+  head do
+    url "https://github.com/elioseverojunior/nvmrc.git", branch: "main"
+
+    depends_on "rust" => :build
+  end
+
+  # Each archive holds nvmrc, nvm (the same program under nvm's name) and
+  # nvm-exec. Linux uses the static musl builds, which run on any distribution.
+  on_macos do
+    on_arm do
+      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.2/nvmrc-0.0.2-aarch64-apple-darwin.tar.gz"
+      sha256 "b3fd198d70102c24dce4e8e89492a4c2924c557e87a3f4168c4fffc03c693df6"
+    end
+
+    on_intel do
+      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.2/nvmrc-0.0.2-x86_64-apple-darwin.tar.gz"
+      sha256 "57b47f3ef9ccb12048d70d71734b91dc2f2d616b89f681f9c9c9dd1a97b5ab40"
+    end
+  end
+
+  on_linux do
+    on_arm do
+      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.2/nvmrc-0.0.2-aarch64-unknown-linux-musl.tar.gz"
+      sha256 "b56c8b6be8d0c386a133c0c8541345f6ebb4a46011a167d9c4676c5f01c16749"
+    end
+
+    on_intel do
+      url "https://github.com/elioseverojunior/nvmrc/releases/download/v0.0.2/nvmrc-0.0.2-x86_64-unknown-linux-musl.tar.gz"
+      sha256 "02e2761c32a58058e3e8fa8a40d417aaba099fd101eb17fefd9c930e275e4ec8"
+    end
+  end
 
   def install
-    # The repository's .cargo/config.toml denies warnings for its own CI; a
-    # newer rustc lint must not fail an install, so warnings stay warnings.
-    # RUSTFLAGS replaces that list; the release profile there still applies.
-    ENV["RUSTFLAGS"] = "--cap-lints=warn"
-    # One package, three binaries: nvmrc, nvm (the same program under nvm's
-    # name) and nvm-exec.
-    system "cargo", "install", *std_cargo_args
+    if build.head?
+      # The repository's .cargo/config.toml denies warnings for its own CI; a
+      # newer rustc lint must not fail an install, so warnings stay warnings.
+      ENV["RUSTFLAGS"] = "--cap-lints=warn"
+      system "cargo", "install", *std_cargo_args
+    else
+      bin.install "nvmrc", "nvm", "nvm-exec"
+    end
   end
 
   test do
