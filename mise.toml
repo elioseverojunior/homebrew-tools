@@ -18,10 +18,9 @@ shellcheck = { version = "latest" }
 
 # aqua ships hk for darwin/arm64 but not darwin/amd64, so macOS is narrowed to
 # arm64 with the compound "<os>/<arch>" form — mise parses both halves, and this
-# is the whole platform gate. There is no separate `arch` key: it never filtered,
-# and since mise 2026.10.25 resolves hk through the packslip backend, an `arch`
-# option fails `mise install` ("option `arch` is not used by the packslip
-# backend").
+# is the whole platform gate. There is no separate `arch` key: it never filtered.
+# The backend is spelled out because since mise 2026.10.25 a bare "hk" resolves
+# through packslip, which rejects both `arch` and `locked` as unknown options.
 "aqua:hk" = { version = "latest", os = [
     "linux",
     "windows",
