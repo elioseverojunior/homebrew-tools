@@ -89,12 +89,12 @@ brew install elioseverojunior/tools/nvmrc
 ```
 
 It installs three binaries: `nvmrc`, `nvm` (the same program under nvm's name)
-and `nvm-exec`. Homebrew downloads the tagged source from GitHub and compiles
-it with `cargo`, pulling in `rust` as a build-only dependency; there is no
-prebuilt binary. Supported: macOS and Linux, on arm64 and x86_64.
+and `nvm-exec`. These are the prebuilt release archives, checked against the
+release's `SHA256SUMS`; on Linux the static musl builds are used, so they run on
+any distribution. Supported: macOS (arm64, x86_64) and Linux (arm64, x86_64).
 
 ```bash
-# Compile the current main branch instead of the latest tag
+# Compile the current main branch with cargo instead (pulls in rust to build)
 brew install --HEAD elioseverojunior/tools/nvmrc
 ```
 
