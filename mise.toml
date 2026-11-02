@@ -22,7 +22,7 @@ shellcheck = { version = "latest" }
 # and since mise 2026.10.25 resolves hk through the packslip backend, an `arch`
 # option fails `mise install` ("option `arch` is not used by the packslip
 # backend").
-"hk" = { version = "latest", os = [
+"aqua:hk" = { version = "latest", os = [
     "linux",
     "windows",
     "macos/arm64",
